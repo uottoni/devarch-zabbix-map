@@ -1,0 +1,81 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:ZabbixMap.App.Controls"
+        xmlns:app="using:ZabbixMap.App"
+        x:Class="ZabbixMap.App.MainWindow"
+        x:DataType="app:MainWindow"
+        Title="ZabbixMap" Width="1400" Height="860" FontSize="12">
+  <Window.Styles>
+    <Style Selector="Button, ToggleButton">
+      <Setter Property="Padding" Value="8,3" />
+      <Setter Property="Margin" Value="2,0" />
+    </Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="MinHeight" Value="22" />
+    </Style>
+  </Window.Styles>
+  <DockPanel>
+    <!-- Barra de ferramentas / busca -->
+    <Border DockPanel.Dock="Top" Background="#F0F0F0" BorderBrush="#CCC" BorderThickness="0,0,0,1" Padding="4">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4">
+          <CheckBox x:Name="TrafficCheck" Content="Tráfego" IsChecked="True" />
+          <TextBlock Text="Zoom:" VerticalAlignment="Center" />
+          <ComboBox x:Name="ZoomBox" Width="86" />
+          <Button x:Name="FitButton" Content="Ajustar" ToolTip.Tip="Ajustar à janela (F)" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="ConnectButton" Content="Conexão" />
+          <Button x:Name="ReloadButton" Content="Atualizar" ToolTip.Tip="Atualizar agora (F5)" />
+          <Separator Width="8" Background="Transparent" />
+          <Button x:Name="NewMapButton" Content="Novo mapa" />
+          <Button x:Name="DeleteMapButton" Content="Excluir mapa" />
+          <Separator Width="8" Background="Transparent" />
+          <ToggleButton x:Name="EditToggle" Content="Editar" ToolTip.Tip="Destrava o mapa para edição" />
+          <Button x:Name="AddHostButton" Content="+ Host" ToolTip.Tip="Adiciona o host selecionado na árvore (ou arraste-o para o mapa)" />
+          <ToggleButton x:Name="LinkToggle" Content="Ligar" ToolTip.Tip="Arraste de um elemento até outro para criar um link" />
+          <Button x:Name="DeleteButton" Content="Remover" ToolTip.Tip="Remove a seleção (Del)" />
+          <Button x:Name="SaveButton" Content="Salvar" ToolTip.Tip="Grava o mapa no Zabbix (Ctrl+S)" />
+          <Separator Width="8" Background="Transparent" />
+          <TextBox x:Name="SearchBox" Width="240" PlaceholderText="Buscar host (Ctrl+F, Enter = próximo)" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Bottom" Background="#F0F0F0" BorderBrush="#CCC" BorderThickness="0,1,0,0" Padding="6,3">
+      <DockPanel>
+        <TextBlock x:Name="DownText" DockPanel.Dock="Right" Foreground="#C62828" FontWeight="SemiBold" />
+        <TextBlock x:Name="StatusText" Text="desconectado" />
+      </DockPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="300,4,*">
+      <!-- Árvore + mini-mapa -->
+      <Grid RowDefinitions="*,4,240">
+        <TreeView x:Name="Tree" x:CompileBindings="True">
+          <TreeView.Styles>
+            <Style Selector="TreeViewItem" x:DataType="app:TreeNode">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            </Style>
+          </TreeView.Styles>
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate x:DataType="app:TreeNode" ItemsSource="{Binding Children}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Width="9" Height="9" Fill="{Binding Dot}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+              </StackPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+        <GridSplitter Grid.Row="1" Background="#CCC" />
+        <c:MiniMap x:Name="Overview" Grid.Row="2" ClipToBounds="True" />
+      </Grid>
+      <GridSplitter Grid.Column="1" Background="#CCC" />
+      <Panel Grid.Column="2">
+        <c:MapCanvas x:Name="Canvas" DragDrop.AllowDrop="True" />
+        <TextBlock x:Name="EmptyHint" Text="Abra um mapa na árvore à esquerda" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#888" FontSize="16" IsHitTestVisible="False" />
+        <StackPanel x:Name="Toasts" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12" Spacing="6" />
+      </Panel>
+    </Grid>
+  </DockPanel>
+</Window>

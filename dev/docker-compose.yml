@@ -1,0 +1,22 @@
+# Zabbix local para desenvolvimento e testes de integração. Login padrão: Admin / zabbix
+services:
+  db:
+    image: postgres:16-alpine
+    environment: &db
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+  server:
+    image: zabbix/zabbix-server-pgsql:alpine-7.0-latest
+    environment:
+      <<: *db
+      DB_SERVER_HOST: db
+    depends_on: [db]
+  web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
+    environment:
+      <<: *db
+      DB_SERVER_HOST: db
+      ZBX_SERVER_HOST: server
+    ports: ["127.0.0.1:8088:8080"]
+    depends_on: [server]
