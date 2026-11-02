@@ -57,4 +57,21 @@ public sealed class FakeClient : IZabbixClient
     public Task<IReadOnlyList<TriggerInfo>> GetActiveTriggersAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TriggerInfo>>(Triggers);
     public Task<IReadOnlyList<ItemInfo>> GetItemsAsync(IEnumerable<string> hostIds, string? keySearch = null, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<ItemInfo>>(Items);
+
+    public List<HostItem> HostItems { get; } = [];
+    public List<(string ItemId, TimeSpan Period)> HistoryRequests { get; } = [];
+
+    public Task<IReadOnlyList<HostItem>> GetHostItemsAsync(string hostId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<HostItem>>(HostItems);
+
+    public Task<IReadOnlyList<HistoryPoint>> GetHistoryAsync(HostItem item, TimeSpan period, CancellationToken ct = default)
+    {
+        HistoryRequests.Add((item.Id, period));
+        var now = DateTimeOffset.UtcNow;
+        var scale = double.TryParse(item.LastValue, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 1;
+        IReadOnlyList<HistoryPoint> points = Enumerable.Range(0, 120)
+            .Select(i => new HistoryPoint(now - period + period / 120 * i, scale * (1 + 0.4 * Math.Sin(i / 9.0 + item.Id.Length))))
+            .ToList();
+        return Task.FromResult(points);
+    }
 }

@@ -156,10 +156,18 @@ public static partial class LabelResolver
     {
         if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
             return value;
-        if (units is "" or "%" or "s" or "uptime" or "unixtime" || units.StartsWith('!'))
+        switch (units)
+        {
+            case "unixtime":
+                return number <= 0 ? "" : DateTimeOffset.FromUnixTimeSeconds((long)number).ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+            case "s" or "uptime":
+                return FormatDuration(number);
+        }
+        // Units Zabbix never scales with K/M/G.
+        if (units is "" or "%" or "ms" or "rpm" or "RPM" || units.StartsWith('!'))
         {
             var text = number.ToString(number % 1 == 0 ? "0" : "0.##", CultureInfo.InvariantCulture);
-            return units is "" or "uptime" or "unixtime" ? text : units == "%" ? text + "%" : $"{text} {units.TrimStart('!')}";
+            return units == "" ? text : units == "%" ? text + " %" : $"{text} {units.TrimStart('!')}";
         }
         // Zabbix scales bytes by 1024 and everything else by 1000.
         double step = units is "B" or "Bps" ? 1024 : 1000;
@@ -171,5 +179,22 @@ public static partial class LabelResolver
             index++;
         }
         return $"{number.ToString("0.##", CultureInfo.InvariantCulture)} {prefixes[index]}{units}";
+    }
+
+    /// <summary>Largest three units, as Zabbix shows durations ("1d 4h 12m", "350ms").</summary>
+    static string FormatDuration(double seconds)
+    {
+        var sign = seconds < 0 ? "-" : "";
+        seconds = Math.Abs(seconds);
+        if (seconds == 0) return "0s";
+        if (seconds < 1) return $"{sign}{Math.Round(seconds * 1000)}ms";
+        var span = TimeSpan.FromSeconds(Math.Round(seconds));
+        var parts = new List<string>();
+        if (span.Days >= 365) parts.Add($"{span.Days / 365}y");
+        if (span.Days % 365 > 0) parts.Add($"{span.Days % 365}d");
+        if (span.Hours > 0) parts.Add($"{span.Hours}h");
+        if (span.Minutes > 0) parts.Add($"{span.Minutes}m");
+        if (span.Seconds > 0) parts.Add($"{span.Seconds}s");
+        return sign + string.Join(' ', parts.Take(3));
     }
 }

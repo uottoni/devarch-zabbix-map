@@ -209,5 +209,7 @@ public class UiTests
         public Task<IReadOnlyList<HostInfo>> GetHostsAsync(CancellationToken ct = default) => throw new ZabbixApiException("offline");
         public Task<IReadOnlyList<TriggerInfo>> GetActiveTriggersAsync(CancellationToken ct = default) => inner.GetActiveTriggersAsync(ct);
         public Task<IReadOnlyList<ItemInfo>> GetItemsAsync(IEnumerable<string> hostIds, string? keySearch = null, CancellationToken ct = default) => inner.GetItemsAsync(hostIds, keySearch, ct);
+        public Task<IReadOnlyList<HostItem>> GetHostItemsAsync(string hostId, CancellationToken ct = default) => inner.GetHostItemsAsync(hostId, ct);
+        public Task<IReadOnlyList<HistoryPoint>> GetHistoryAsync(HostItem item, TimeSpan period, CancellationToken ct = default) => inner.GetHistoryAsync(item, period, ct);
     }
 }

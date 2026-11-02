@@ -15,6 +15,7 @@ Para gerar executáveis que não exigem .NET: `./publish.sh` (saída em `dist/`)
 | Ação | Como |
 | --- | --- |
 | Abrir mapa | Duplo clique na árvore |
+| Resumo do host | Duplo clique no host do mapa, ou botão direito no mapa ou na árvore |
 | Mover a vista | Arrastar o fundo, botão do meio ou clicar no mini-mapa |
 | Zoom | Roda do mouse; `F` ajusta à janela |
 | Buscar host | `Ctrl+F`, `Enter` vai ao próximo; também filtra a árvore |
@@ -24,6 +25,10 @@ Para gerar executáveis que não exigem .NET: `./publish.sh` (saída em `dist/`)
 | Rx/Tx e estilo do link | Botão direito no link, **Editar link…** |
 | Seleção múltipla | `Ctrl`+clique ou `Shift`+arrastar |
 | Gravar | `Ctrl+S` |
+
+## Resumo do host
+
+Mostra os últimos dados do host agrupados pela etiqueta `component` (como o subfiltro de "Dados recentes" do Zabbix) e, dentro dela, por interface ou sistema de arquivos. Os botões de componente filtram a lista. Em servidores anteriores à 5.4 o agrupamento usa as applications. Clicar num item numérico mostra o gráfico do histórico (1 h, 6 h, 24 h ou 7 dias; 7 dias usa as médias horárias de trends); nas interfaces, recebido e enviado aparecem no mesmo gráfico. Os dados se atualizam a cada 30 s.
 
 ## Status e alertas
 

@@ -91,6 +91,7 @@ public partial class MainWindow : Window
         };
 
         Tree.DoubleTapped += async (_, _) => await GuardAsync(ActivateTreeSelectionAsync);
+        Tree.ContextRequested += OnTreeContext;
         Tree.AddHandler(PointerPressedEvent, OnTreePointerPressed, RoutingStrategies.Tunnel);
         Tree.AddHandler(PointerMovedEvent, OnTreePointerMoved, RoutingStrategies.Tunnel);
 
@@ -516,7 +517,27 @@ public partial class MainWindow : Window
     async Task ActivateElementAsync(MapElement element)
     {
         if (element.Type == ElementType.Map) await OpenMapAsync(element.RefId);
-        else if (element.Type == ElementType.Host) OpenInZabbix(element);
+        else if (element.Type == ElementType.Host) ShowHostSummary(element.RefId);
+    }
+
+    /// <summary>Opens the latest-data summary; non-modal so several hosts can be compared.</summary>
+    public HostSummaryWindow? ShowHostSummary(string hostId)
+    {
+        if (_client == null || _snapshot == null || !_snapshot.Hosts.TryGetValue(hostId, out var host)) return null;
+        var window = new HostSummaryWindow(_client, host, _snapshot.HostStatus(hostId));
+        window.Show(this);
+        return window;
+    }
+
+    void OnTreeContext(object? sender, ContextRequestedEventArgs e)
+    {
+        var node = (e.Source as Control)?.DataContext as TreeNode;
+        if (node is not { Kind: TreeNodeKind.Host or TreeNodeKind.Problem } || node.Id == "") return;
+        var menu = new ContextMenu();
+        menu.Items.Add(CreateMenuItem("Resumo do host…", () => { ShowHostSummary(node.Id); return Task.CompletedTask; }));
+        menu.Items.Add(CreateMenuItem("Localizar no mapa", () => { FocusHost(node.Id); return Task.CompletedTask; }));
+        menu.Open(Tree);
+        e.Handled = true;
     }
 
     void OpenInZabbix(MapElement element)
@@ -536,7 +557,11 @@ public partial class MainWindow : Window
         var editable = EditToggle.IsChecked == true;
         if (element != null)
         {
-            if (element.Type == ElementType.Host) Item("Abrir problemas no Zabbix", () => { OpenInZabbix(element); return Task.CompletedTask; });
+            if (element.Type == ElementType.Host)
+            {
+                Item("Resumo do host…", () => { ShowHostSummary(element.RefId); return Task.CompletedTask; });
+                Item("Abrir problemas no Zabbix", () => { OpenInZabbix(element); return Task.CompletedTask; });
+            }
             if (element.Type == ElementType.Map) Item("Abrir submapa", () => OpenMapAsync(element.RefId));
             if (editable) Item("Editar rótulo…", () => EditLabelAsync(element));
         }
