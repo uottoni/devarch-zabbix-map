@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     readonly TreeNode _groupsNode = new(TreeNodeKind.Section, "Hosts") { IsExpanded = true };
     readonly TreeNode _problemsNode = new(TreeNodeKind.Section, "Problemas");
     readonly DispatcherTimer _timer = new() { Interval = PollInterval };
-    readonly Settings _settings = Settings.Load();
+    readonly Settings _settings;
 
     IZabbixClient? _client;
     OutageTracker _outages = new();
@@ -29,14 +29,24 @@ public partial class MainWindow : Window
     IReadOnlyList<HostGroupInfo> _groups = [];
     string? _iconId;
     bool _refreshing;
+    bool _started;
     int _searchIndex;
     string _treeSignature = "";
 
     public event Action<int>? DownCountChanged;
     public Action<string, string> Notify { get; set; } = DesktopNotifier.Show;
+    public ISecretStore Secrets { get; set; } = SecretStores.CreateDefault();
+    public Func<ConnectionInput, Task<(IZabbixClient Client, string Secret)>> Connect { get; set; } = ConnectToServerAsync;
+    public Func<string?, Task<ConnectionInput?>> AskConnection { get; set; }
 
-    public MainWindow()
+    public MainWindow() : this(Settings.Load())
     {
+    }
+
+    public MainWindow(Settings settings)
+    {
+        _settings = settings;
+        AskConnection = AskConnectionAsync;
         InitializeComponent();
         _roots.Add(_mapsNode);
         _roots.Add(_groupsNode);
@@ -123,54 +133,98 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Connects with the saved credential, or asks for one. Runs once: Opened fires again on every restore from the tray.</summary>
     public async Task StartAsync()
     {
-        if (_settings.Url != "" && _settings.Token != "")
+        if (_started) return;
+        _started = true;
+
+        if (_settings.Url != "" && !string.IsNullOrEmpty(_settings.Token))
         {
-            try
-            {
-                var client = new ZabbixClient(_settings.Url, _settings.IgnoreCertificateErrors);
-                await client.ConnectWithTokenAsync(_settings.Token);
-                await AttachAsync(client);
-                if (_settings.LastMapId != "") await OpenMapAsync(_settings.LastMapId);
-                return;
-            }
-            catch (Exception e) when (e is ZabbixApiException or HttpRequestException or TaskCanceledException or FormatException or UriFormatException)
-            {
-                await ShowConnectionAsync(e.Message);
-                return;
-            }
+            await Secrets.SetAsync(_settings.Url, _settings.Token);
+            _settings.Token = null;
+            _settings.Save();
         }
-        await ShowConnectionAsync(null);
+
+        var secret = _settings.Url == "" ? null : await Secrets.GetAsync(_settings.Url);
+        if (secret == null)
+        {
+            await ShowConnectionAsync(null);
+            return;
+        }
+        try
+        {
+            var (client, _) = await Connect(new ConnectionInput(_settings.Url, secret, "", "", _settings.IgnoreCertificateErrors));
+            await AttachAsync(client);
+            if (_settings.LastMapId != "") await OpenMapAsync(_settings.LastMapId);
+        }
+        catch (ZabbixApiException e)
+        {
+            // The server rejected the credential; an unreachable server keeps it for the next try.
+            await Secrets.DeleteAsync(_settings.Url);
+            await ShowConnectionAsync(_settings.SessionLogin ? "A sessão salva expirou. Entre novamente." : e.Message);
+        }
+        catch (Exception e) when (IsConnectionError(e))
+        {
+            await ShowConnectionAsync(e.Message);
+        }
     }
+
+    static bool IsConnectionError(Exception e) =>
+        e is ZabbixApiException or HttpRequestException or TaskCanceledException or FormatException or UriFormatException;
 
     async Task ShowConnectionAsync(string? error)
     {
         while (true)
         {
-            var input = await Dialogs.ConnectionAsync(this, _settings, error);
+            var input = await AskConnection(error);
             if (input == null) return;
-            ZabbixClient? client = null;
             try
             {
-                client = new ZabbixClient(input.Url, input.IgnoreCertificateErrors);
-                if (input.Password != "") await client.ConnectWithPasswordAsync(input.User, input.Password);
-                else await client.ConnectWithTokenAsync(input.Token);
-                _settings.Url = client.BaseUrl;
-                _settings.Token = input.Password != "" ? "" : input.Token;
-                _settings.User = input.User;
-                _settings.IgnoreCertificateErrors = input.IgnoreCertificateErrors;
-                _settings.Save();
-                await AttachAsync(client);
-                StatusText.Text = $"conectado a {client.BaseUrl} (Zabbix {client.ServerVersion})";
+                await ConnectAndSaveAsync(input);
                 return;
             }
-            catch (Exception e) when (e is ZabbixApiException or HttpRequestException or TaskCanceledException or FormatException or UriFormatException)
+            catch (Exception e) when (IsConnectionError(e))
             {
-                client?.Dispose();
                 error = e.Message;
             }
         }
+    }
+
+    /// <summary>Connects and stores the credential: the API token, or the session a password login returns. The password itself is never stored.</summary>
+    public async Task ConnectAndSaveAsync(ConnectionInput input)
+    {
+        var (client, secret) = await Connect(input);
+        if (_settings.Url != "" && _settings.Url != client.BaseUrl) await Secrets.DeleteAsync(_settings.Url);
+        _settings.Url = client.BaseUrl;
+        _settings.User = input.User;
+        _settings.IgnoreCertificateErrors = input.IgnoreCertificateErrors;
+        _settings.SessionLogin = input.Password != "";
+        _settings.Save();
+        await Secrets.SetAsync(client.BaseUrl, secret);
+        await AttachAsync(client);
+    }
+
+    static async Task<(IZabbixClient Client, string Secret)> ConnectToServerAsync(ConnectionInput input)
+    {
+        var client = new ZabbixClient(input.Url, input.IgnoreCertificateErrors);
+        try
+        {
+            if (input.Password != "") await client.ConnectWithPasswordAsync(input.User, input.Password);
+            else await client.ConnectWithTokenAsync(input.Token);
+            return (client, client.AuthToken!);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
+    async Task<ConnectionInput?> AskConnectionAsync(string? error)
+    {
+        var savedToken = _settings.Url == "" || _settings.SessionLogin ? "" : await Secrets.GetAsync(_settings.Url) ?? "";
+        return await Dialogs.ConnectionAsync(this, _settings, savedToken, error);
     }
 
     public async Task AttachAsync(IZabbixClient client)
@@ -213,7 +267,7 @@ public partial class MainWindow : Window
             RebuildHostTree();
             UpdateProblems(snapshot);
             ReportOutages(snapshot);
-            StatusText.Text = $"conectado a {_client.BaseUrl} · atualizado às {DateTime.Now:HH:mm:ss}";
+            StatusText.Text = $"conectado a {_client.BaseUrl}{Version()} · atualizado às {DateTime.Now:HH:mm:ss}";
         }
         catch (Exception e) when (e is ZabbixApiException or HttpRequestException or TaskCanceledException)
         {
@@ -237,6 +291,8 @@ public partial class MainWindow : Window
         var items = await _client.GetItemsAsync(hostIds);
         snapshot.Items = items.GroupBy(i => (i.HostId, i.Key)).ToDictionary(g => g.Key, g => g.First());
     }
+
+    string Version() => _client is ZabbixClient { ServerVersion: var v } ? $" (Zabbix {v})" : "";
 
     void ReportOutages(MonitoringSnapshot snapshot)
     {

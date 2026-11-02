@@ -15,6 +15,8 @@ public sealed class ZabbixClient : IZabbixClient, IDisposable
 
     public Version ServerVersion { get; private set; } = new(0, 0);
     public string BaseUrl { get; }
+    /// <summary>API token or, after a password login, the session id the server returned.</summary>
+    public string? AuthToken => _token;
 
     public ZabbixClient(string url, bool ignoreCertificateErrors = false, HttpMessageHandler? handler = null)
     {

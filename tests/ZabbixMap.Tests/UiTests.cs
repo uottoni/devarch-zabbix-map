@@ -15,7 +15,7 @@ namespace ZabbixMap.Tests;
 
 public class UiTests
 {
-    static FakeClient Network()
+    internal static FakeClient Network()
     {
         (string Id, string Label, int X, int Y)[] nodes =
         [

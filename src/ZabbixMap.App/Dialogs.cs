@@ -56,12 +56,12 @@ public static class Dialogs
         return await window.ShowDialog<string?>(owner);
     }
 
-    public static async Task<ConnectionInput?> ConnectionAsync(Window owner, Settings settings, string? error)
+    public static async Task<ConnectionInput?> ConnectionAsync(Window owner, Settings settings, string savedToken, string? error)
     {
         var url = new TextBox { Text = settings.Url, PlaceholderText = "https://zabbix.exemplo.com" };
-        var token = new TextBox { Text = settings.Token, PasswordChar = '•', PlaceholderText = "Recomendado (Zabbix 5.4+)" };
+        var token = new TextBox { Text = savedToken, PasswordChar = '•', PlaceholderText = "Recomendado (Zabbix 5.4+)" };
         var user = new TextBox { Text = settings.User };
-        var password = new TextBox { PasswordChar = '•', PlaceholderText = "Não é salva" };
+        var password = new TextBox { PasswordChar = '•', PlaceholderText = "Não é salva; a sessão fica no cofre do sistema" };
         var ignore = new CheckBox { Content = "Ignorar erros de certificado TLS (somente em rede confiável)", IsChecked = settings.IgnoreCertificateErrors };
         var body = new StackPanel { Spacing = 4 };
         if (error != null) body.Children.Add(new TextBlock { Text = error, Foreground = Avalonia.Media.Brushes.Firebrick, TextWrapping = Avalonia.Media.TextWrapping.Wrap });
