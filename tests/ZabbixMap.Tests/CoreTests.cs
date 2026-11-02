@@ -25,6 +25,7 @@ public class ClientTests
 
         Assert.Equal("Admin", server.Last("user.login")["params"]!["username"]!.ToString());
         Assert.Equal("Bearer session", server.AuthHeaders[^1]);
+        Assert.Equal("session", client.AuthToken);
         Assert.Null(server.Last("map.get")["auth"]);
     }
 

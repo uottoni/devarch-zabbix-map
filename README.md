@@ -35,10 +35,12 @@ O cliente lê `apiinfo.version` e adapta autenticação, formato dos elementos, 
 
 Rótulos de tráfego no frontend do próprio Zabbix aparecem como valor bruto; a formatação em `Gbps` é feita por este app.
 
-O token de API fica em texto puro em `settings.json`, na pasta de configuração do usuário (permissão 600 em Linux/macOS). Senhas não são salvas.
+A conexão fica guardada na máquina: o token de API, ou a sessão devolvida pelo login com senha, vai para o cofre do sistema (Secret Service/KWallet/GNOME Keyring no Linux, Keychain no macOS). No Windows, ou quando não há cofre disponível, vai para `secrets.json` na pasta de configuração do usuário, com permissão só do usuário; no Windows o valor também é cifrado com DPAPI. A senha nunca é salva. Se a sessão expirar no Zabbix, o app pede o login de novo.
 
 ## Testes
 
     dotnet test --project tests/ZabbixMap.Tests
+
+`ZABBIXMAP_KEYRING_TEST=1` inclui o teste que grava e apaga uma credencial de teste no cofre real do sistema.
 
 `dev/docker-compose.yml` sobe um Zabbix 7.0 local em `http://localhost:8088` (Admin / zabbix).
