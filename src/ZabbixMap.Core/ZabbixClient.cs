@@ -207,6 +207,69 @@ public sealed class ZabbixClient : IZabbixClient, IDisposable
         return result.AsArray().Select(i => new ItemInfo(i.Str("hostid"), i.Str("name"), i.Str("key_"), i.Str("lastvalue"), i.Str("units"))).ToList();
     }
 
+    public async Task<IReadOnlyList<HostItem>> GetHostItemsAsync(string hostId, CancellationToken ct = default)
+    {
+        var query = new JsonObject
+        {
+            ["hostids"] = new JsonArray(hostId),
+            ["output"] = new JsonArray("itemid", "name", "key_", "lastvalue", "prevvalue", "lastclock", "units", "value_type"),
+            ["monitored"] = true,
+            ["sortfield"] = "name",
+        };
+        // 5.4 replaced applications with tags and moved value maps onto the item.
+        if (UsesExpressionMacros)
+        {
+            query["selectTags"] = "extend";
+            query["selectValueMap"] = "extend";
+        }
+        else query["selectApplications"] = new JsonArray("name");
+
+        var result = await CallAsync("item.get", query, ct);
+        return result.AsArray().Select(i =>
+        {
+            var tags = UsesExpressionMacros
+                ? i!["tags"]?.AsArray().Select(t => new ItemTag(t.Str("tag"), t.Str("value"))).ToList() ?? []
+                : i!["applications"]?.AsArray().Select(a => new ItemTag("component", a.Str("name"))).ToList() ?? [];
+            var valueMap = (i["valuemap"] as JsonObject)?["mappings"]?.AsArray()
+                .GroupBy(m => m.Str("value")).ToDictionary(g => g.Key, g => g.First().Str("newvalue")) ?? [];
+            var clock = i.Int("lastclock");
+            return new HostItem(i.Str("itemid"), i.Str("name"), i.Str("key_"), i.Str("lastvalue"), i.Str("prevvalue"),
+                clock > 0 ? DateTimeOffset.FromUnixTimeSeconds(clock) : null, i.Str("units"), i.Int("value_type"), tags, valueMap);
+        }).ToList();
+    }
+
+    /// <summary>Raw history up to a day; hourly trend averages beyond that, as the Zabbix graphs do.</summary>
+    public async Task<IReadOnlyList<HistoryPoint>> GetHistoryAsync(HostItem item, TimeSpan period, CancellationToken ct = default)
+    {
+        if (!item.IsNumeric) return [];
+        var from = DateTimeOffset.UtcNow - period;
+        var useTrends = period > TimeSpan.FromDays(1) && ServerVersion >= new Version(3, 0);
+        var query = new JsonObject
+        {
+            ["itemids"] = new JsonArray(item.Id),
+            ["time_from"] = from.ToUnixTimeSeconds(),
+        };
+        if (useTrends)
+        {
+            query["output"] = new JsonArray("clock", "value_avg");
+        }
+        else
+        {
+            query["history"] = item.ValueType;
+            query["output"] = "extend";
+            query["sortfield"] = "clock";
+            query["sortorder"] = "ASC";
+            query["limit"] = 10000;
+        }
+        var result = await CallAsync(useTrends ? "trend.get" : "history.get", query, ct);
+        return result.AsArray()
+            .Select(p => (Clock: p.Int("clock"), Raw: p.Str(useTrends ? "value_avg" : "value")))
+            .Where(p => double.TryParse(p.Raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
+            .Select(p => new HistoryPoint(DateTimeOffset.FromUnixTimeSeconds(p.Clock), double.Parse(p.Raw, System.Globalization.CultureInfo.InvariantCulture)))
+            .OrderBy(p => p.Time)
+            .ToList();
+    }
+
     public void Dispose() => _http.Dispose();
 }
 

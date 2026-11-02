@@ -16,6 +16,8 @@ public interface IZabbixClient
     Task<IReadOnlyList<HostInfo>> GetHostsAsync(CancellationToken ct = default);
     Task<IReadOnlyList<TriggerInfo>> GetActiveTriggersAsync(CancellationToken ct = default);
     Task<IReadOnlyList<ItemInfo>> GetItemsAsync(IEnumerable<string> hostIds, string? keySearch = null, CancellationToken ct = default);
+    Task<IReadOnlyList<HostItem>> GetHostItemsAsync(string hostId, CancellationToken ct = default);
+    Task<IReadOnlyList<HistoryPoint>> GetHistoryAsync(HostItem item, TimeSpan period, CancellationToken ct = default);
 }
 
 public record MapSummary(string Id, string Name);

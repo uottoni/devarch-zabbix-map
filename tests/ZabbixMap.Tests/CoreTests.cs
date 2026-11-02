@@ -211,7 +211,7 @@ public class MonitoringTests
     [InlineData("1090000000", "bps", "1.09 Gbps")]
     [InlineData("2048", "B", "2 KB")]
     [InlineData("0", "bps", "0 bps")]
-    [InlineData("42.5", "%", "42.5%")]
+    [InlineData("42.5", "%", "42.5 %")]
     [InlineData("abc", "", "abc")]
     [InlineData("", "bps", "")]
     public void FormatsValues(string value, string units, string expected) =>
