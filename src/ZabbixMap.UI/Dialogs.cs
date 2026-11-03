@@ -1,32 +1,27 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
-using ZabbixMap.App.Services;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using ZabbixMap.UI.Services;
 using ZabbixMap.Core;
 
-namespace ZabbixMap.App;
+namespace ZabbixMap.UI;
 
 public sealed record ConnectionInput(string Url, string Token, string User, string Password, bool IgnoreCertificateErrors);
 
 /// <summary>Small modal dialogs.</summary>
 public static class Dialogs
 {
-    static Window Shell(string title, Control content, out StackPanel buttons, double width = 460)
+    static DialogHandle Shell(string title, Control content, out StackPanel buttons, double width = 460)
     {
         buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         var root = new DockPanel { Margin = new Thickness(14) };
         DockPanel.SetDock(buttons, Dock.Bottom);
         root.Children.Add(buttons);
         root.Children.Add(content);
-        return new Window
-        {
-            Title = title,
-            Content = root,
-            Width = width,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        return new DialogHandle(title, root, width);
     }
 
     static Button Add(StackPanel panel, string text, Action onClick)
@@ -37,7 +32,7 @@ public static class Dialogs
         return button;
     }
 
-    public static async Task<bool> ConfirmAsync(Window owner, string title, string message)
+    public static async Task<bool> ConfirmAsync(Control owner, string title, string message)
     {
         var window = Shell(title, new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, out var buttons);
         Add(buttons, "Cancelar", () => window.Close(false));
@@ -45,18 +40,18 @@ public static class Dialogs
         return await window.ShowDialog<bool>(owner);
     }
 
-    public static async Task<string?> PromptAsync(Window owner, string title, string caption, string initial = "", bool multiline = false)
+    public static async Task<string?> PromptAsync(Control owner, string title, string caption, string initial = "", bool multiline = false)
     {
         var box = new TextBox { Text = initial, AcceptsReturn = multiline, MinHeight = multiline ? 90 : 0 };
         var body = new StackPanel { Spacing = 6, Children = { new TextBlock { Text = caption }, box } };
         var window = Shell(title, body, out var buttons);
         Add(buttons, "Cancelar", () => window.Close(null));
         Add(buttons, "OK", () => window.Close(box.Text ?? "")).IsDefault = !multiline;
-        window.Opened += (_, _) => box.Focus();
+        box.AttachedToVisualTree += (_, _) => Dispatcher.UIThread.Post(() => box.Focus());
         return await window.ShowDialog<string?>(owner);
     }
 
-    public static async Task<ConnectionInput?> ConnectionAsync(Window owner, Settings settings, string savedToken, string? error)
+    public static async Task<ConnectionInput?> ConnectionAsync(Control owner, Settings settings, string savedToken, string? error)
     {
         var url = new TextBox { Text = settings.Url, PlaceholderText = "https://zabbix.exemplo.com" };
         var token = new TextBox { Text = savedToken, PasswordChar = '•', PlaceholderText = "Recomendado (Zabbix 5.4+)" };
@@ -82,7 +77,7 @@ public static class Dialogs
     }
 
     /// <summary>Edits a link in place; returns false when cancelled.</summary>
-    public static async Task<bool> LinkAsync(Window owner, MapLink link, IReadOnlyList<(string Host, ItemInfo Item)> items, bool expressionMacros)
+    public static async Task<bool> LinkAsync(Control owner, MapLink link, IReadOnlyList<(string Host, ItemInfo Item)> items, bool expressionMacros)
     {
         var entries = items.Select(i => new LinkItem(i.Host, i.Item)).ToList();
         var rx = new ComboBox { ItemsSource = entries.Where(e => e.Item.Key.Contains(".in")).ToList(), HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = "(nenhum)" };
@@ -127,5 +122,91 @@ public static class Dialogs
     sealed record LinkItem(string Host, ItemInfo Item)
     {
         public override string ToString() => $"{Host}: {Item.Name}";
+    }
+}
+
+/// <summary>A modal dialog shown as a window on desktop and as an overlay in the browser.</summary>
+public sealed class DialogHandle(string title, Control content, double width)
+{
+    readonly TaskCompletionSource<object?> _result = new();
+    Action? _dismiss;
+
+    public void Close(object? result)
+    {
+        _result.TrySetResult(result);
+        _dismiss?.Invoke();
+    }
+
+    public async Task<T> ShowDialog<T>(Control owner)
+    {
+        _dismiss = DialogPresenter.Present(owner, title, content, width, null, modal: true, onClosed: () => _result.TrySetResult(null));
+        return await _result.Task is T value ? value : default!;
+    }
+}
+
+public static class DialogPresenter
+{
+    /// <summary>Non-modal panel, such as the host summary: a separate window on desktop, an overlay in the browser.</summary>
+    public static void ShowPanel(Control owner, string title, Control content, double width, double height) =>
+        Present(owner, title, content, width, height, modal: false, onClosed: null);
+
+    /// <summary>Shows the content and returns the action that dismisses it.</summary>
+    public static Action Present(Control owner, string title, Control content, double width, double? height, bool modal, Action? onClosed)
+    {
+        if (TopLevel.GetTopLevel(owner) is Window ownerWindow)
+        {
+            var window = new Window
+            {
+                Title = title,
+                Content = content,
+                Width = width,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            };
+            if (height is { } h) window.Height = h;
+            else
+            {
+                window.SizeToContent = SizeToContent.Height;
+                window.CanResize = false;
+            }
+            window.Closed += (_, _) => onClosed?.Invoke();
+            if (modal) _ = window.ShowDialog(ownerWindow);
+            else window.Show(ownerWindow);
+            return window.Close;
+        }
+
+        var host = owner as MainView ?? owner.FindAncestorOfType<MainView>()
+            ?? throw new InvalidOperationException("Sem janela nem MainView para exibir o diálogo.");
+        Action? remove = null;
+        var closeButton = new Button { Content = "✕", Padding = new Thickness(8, 2), Background = Brushes.Transparent };
+        var titleBar = new DockPanel { Background = new SolidColorBrush(Color.Parse("#2B3A4A")) };
+        DockPanel.SetDock(closeButton, Dock.Right);
+        titleBar.Children.Add(closeButton);
+        titleBar.Children.Add(new TextBlock { Text = title, Foreground = Brushes.White, Margin = new Thickness(10, 6), FontWeight = FontWeight.SemiBold });
+        var body = new DockPanel();
+        DockPanel.SetDock(titleBar, Dock.Top);
+        body.Children.Add(titleBar);
+        body.Children.Add(content);
+        var card = new Border
+        {
+            Background = Brushes.White,
+            CornerRadius = new CornerRadius(4),
+            ClipToBounds = true,
+            BoxShadow = BoxShadows.Parse("0 4 24 0 #66000000"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = width,
+            Margin = new Thickness(16),
+            Child = body,
+        };
+        if (height is { } panelHeight) card.Height = panelHeight;
+        // Dims and blocks the map while a modal dialog is open.
+        var layer = new Panel { Background = new SolidColorBrush(Colors.Black, modal ? 0.35 : 0.15), Children = { card } };
+        closeButton.Click += (_, _) =>
+        {
+            remove?.Invoke();
+            onClosed?.Invoke();
+        };
+        remove = host.ShowOverlay(layer);
+        return () => remove();
     }
 }

@@ -2,28 +2,12 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Xunit;
-using ZabbixMap.App;
-using ZabbixMap.App.Controls;
-using ZabbixMap.App.Services;
+using ZabbixMap.UI;
+using ZabbixMap.UI.Controls;
+using ZabbixMap.UI.Services;
 using ZabbixMap.Core;
 
 namespace ZabbixMap.Tests;
-
-public sealed class MemorySecretStore : ISecretStore
-{
-    public Dictionary<string, string> Values { get; } = [];
-    public Task<string?> GetAsync(string account) => Task.FromResult(Values.GetValueOrDefault(account));
-    public Task SetAsync(string account, string secret)
-    {
-        Values[account] = secret;
-        return Task.CompletedTask;
-    }
-    public Task DeleteAsync(string account)
-    {
-        Values.Remove(account);
-        return Task.CompletedTask;
-    }
-}
 
 /// <summary>DZM-1: restoring from the tray must not ask for the connection again, and credentials must survive restarts.</summary>
 public class ConnectionTests
@@ -39,22 +23,32 @@ public class ConnectionTests
         public Func<ConnectionInput, string> Login { get; set; } = input => input.Password != "" ? "sessao-123" : input.Token;
         public Exception? Failure { get; set; }
 
-        public MainWindow Window(Settings settings) => new(settings)
+        public MainWindow Window(Settings settings)
         {
-            Notify = (_, _) => { },
-            Secrets = Store,
-            Connect = input =>
+            var window = new MainWindow(settings);
+            Configure(window.View);
+            return window;
+        }
+
+        public MainView View(Settings settings) => Configure(new MainView(settings));
+
+        MainView Configure(MainView view)
+        {
+            view.Notify = (_, _) => { };
+            view.Secrets = Store;
+            view.Connect = input =>
             {
                 if (Failure != null) throw Failure;
                 TokensUsed.Add(input.Password != "" ? "senha" : input.Token);
                 return Task.FromResult<(IZabbixClient, string)>((Client, Login(input)));
-            },
-            AskConnection = error =>
+            };
+            view.AskConnection = error =>
             {
                 Asked.Add(error);
                 return Task.FromResult<ConnectionInput?>(null);
-            },
-        };
+            };
+            return view;
+        }
     }
 
     [AvaloniaFact]
@@ -64,12 +58,12 @@ public class ConnectionTests
         h.Store.Values[Url] = "token-api";
         var window = h.Window(new Settings { Url = Url, LastMapId = "5" });
         // Same wiring as App: start on Opened, hide to the tray on close.
-        window.Opened += async (_, _) => await window.StartAsync();
-        window.DownCountChanged += _ => { };
+        window.Opened += async (_, _) => await window.View.StartAsync();
+        window.HideOnClose = true;
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        var canvas = window.FindControl<MapCanvas>("Canvas")!;
+        var canvas = window.View.FindControl<MapCanvas>("Canvas")!;
         Assert.Equal(["token-api"], h.TokensUsed);
         Assert.NotNull(canvas.Map);
         canvas.SetZoom(2);
@@ -92,7 +86,7 @@ public class ConnectionTests
     public async Task PasswordLogin_StoresSessionOutsideSettings_AndReusesItOnNextStart()
     {
         var h = new Harness();
-        var first = h.Window(new Settings());
+        var first = h.View(new Settings());
         await first.ConnectAndSaveAsync(new ConnectionInput(Url, "", "ulisses", "senha-secreta", false));
 
         Assert.Equal("sessao-123", h.Store.Values[Url]);
@@ -100,7 +94,7 @@ public class ConnectionTests
         Assert.DoesNotContain("sessao-123", saved);
         Assert.DoesNotContain("senha-secreta", saved);
 
-        var next = h.Window(Settings.Load());
+        var next = h.View(Settings.Load());
         await next.StartAsync();
         Assert.Equal(["senha", "sessao-123"], h.TokensUsed);
         Assert.Empty(h.Asked);
@@ -111,7 +105,7 @@ public class ConnectionTests
     {
         var h = new Harness { Failure = new ZabbixApiException("Session terminated, re-login, please.") };
         h.Store.Values[Url] = "sessao-velha";
-        await h.Window(new Settings { Url = Url, SessionLogin = true }).StartAsync();
+        await h.View(new Settings { Url = Url, SessionLogin = true }).StartAsync();
 
         Assert.Empty(h.Store.Values);
         Assert.Contains("expirou", Assert.Single(h.Asked));
@@ -122,7 +116,7 @@ public class ConnectionTests
     {
         var h = new Harness { Failure = new HttpRequestException("Connection refused") };
         h.Store.Values[Url] = "token-api";
-        await h.Window(new Settings { Url = Url }).StartAsync();
+        await h.View(new Settings { Url = Url }).StartAsync();
 
         Assert.Equal("token-api", h.Store.Values[Url]);
         Assert.Equal("Connection refused", Assert.Single(h.Asked));
@@ -133,7 +127,7 @@ public class ConnectionTests
     {
         var h = new Harness();
         var settings = new Settings { Url = Url, Token = "token-antigo" };
-        await h.Window(settings).StartAsync();
+        await h.View(settings).StartAsync();
 
         Assert.Equal("token-antigo", h.Store.Values[Url]);
         Assert.Null(settings.Token);

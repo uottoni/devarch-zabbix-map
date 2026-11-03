@@ -11,6 +11,6 @@
     <PackageReference Include="xunit.v3" Version="3.2.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ZabbixMap.App\ZabbixMap.App.csproj" />
+    <ProjectReference Include="..\..\src\ZabbixMap.UI\ZabbixMap.UI.csproj" />
   </ItemGroup>
 </Project>

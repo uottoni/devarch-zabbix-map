@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace ZabbixMap.App;
+namespace ZabbixMap.UI;
 
 public enum TreeNodeKind { Section, Map, Group, Host, Problem }
 

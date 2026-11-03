@@ -3,7 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Xunit;
-using ZabbixMap.App;
+using ZabbixMap.UI;
 using ZabbixMap.Core;
 
 namespace ZabbixMap.Tests;
@@ -165,26 +165,32 @@ public class HostSummaryTests
     {
         var client = UiTests.Network();
         client.HostItems.AddRange(Switch());
-        var main = new MainWindow { Notify = (_, _) => { } };
-        main.Show();
+        for (var i = 0; i < 9; i++)
+            client.Triggers.Add(new($"p{i}", $"Interface ether{i + 5}(): Link down", 2, DateTimeOffset.UtcNow.AddDays(-i), ["1"]));
+        var window = new MainWindow();
+        var main = window.View;
+        main.Notify = (_, _) => { };
+        window.Show();
         await main.AttachAsync(client);
         await main.OpenMapAsync("5");
 
+        await main.RefreshAsync();
         var summary = main.ShowHostSummary("1")!;
         await summary.LoadAsync();
         Dispatcher.UIThread.RunJobs();
+        Assert.Equal(9, summary.ProblemsPanel!.Children.Count);
 
-        var sections = summary.Rows.OfType<HostSummaryWindow.SectionRow>().ToList();
+        var sections = summary.Rows.OfType<HostSummaryView.SectionRow>().ToList();
         Assert.Equal(["cpu", "network › br_backbone", "network › sfp1", "storage", "system", "temperature"], sections.Select(r => r.Title));
         Assert.Equal(3, sections[1].Count);
-        Assert.DoesNotContain(summary.Rows.OfType<HostSummaryWindow.ItemRow>(), r => !r.Item.HasData);
+        Assert.DoesNotContain(summary.Rows.OfType<HostSummaryView.ItemRow>(), r => !r.Item.HasData);
 
         // First received-traffic item is charted with its sent partner.
         Assert.Equal(["Recebido", "Enviado"], summary.Chart.Series.Select(s => s.Name));
         Assert.Contains(client.HistoryRequests, r => r.ItemId == "6");
 
         if (Environment.GetEnvironmentVariable("ZABBIXMAP_SHOT") is { } path)
-            summary.CaptureRenderedFrame()!.Save(path.Replace(".png", "-host.png"), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+            ((Avalonia.Controls.Window)Avalonia.Controls.TopLevel.GetTopLevel(summary)!).CaptureRenderedFrame()!.Save(path.Replace(".png", "-host.png"), new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
 
         await summary.ShowChartAsync(Switch()[0]);
         Assert.Equal(["#1: CPU utilization"], summary.Chart.Series.Select(s => s.Name));

@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using ZabbixMap.Core;
 
-namespace ZabbixMap.App.Controls;
+namespace ZabbixMap.UI.Controls;
 
 /// <summary>Interactive map surface: pan, zoom, drag nodes, draw links. World coordinates are the Zabbix x/y.</summary>
 public sealed class MapCanvas : Control
