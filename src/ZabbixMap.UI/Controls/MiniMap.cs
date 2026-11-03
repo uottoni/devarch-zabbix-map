@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 
-namespace ZabbixMap.App.Controls;
+namespace ZabbixMap.UI.Controls;
 
 /// <summary>Overview of the whole map; click or drag to move the main canvas.</summary>
 public sealed class MiniMap : Control

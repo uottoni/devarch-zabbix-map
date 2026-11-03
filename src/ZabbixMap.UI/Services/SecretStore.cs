@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace ZabbixMap.App.Services;
+namespace ZabbixMap.UI.Services;
 
 /// <summary>Keeps API tokens and session ids out of settings.json, keyed by server URL.</summary>
 public interface ISecretStore
@@ -17,6 +17,7 @@ public static class SecretStores
 {
     public static ISecretStore CreateDefault()
     {
+        if (OperatingSystem.IsBrowser()) return new MemorySecretStore();
         var file = new FileSecretStore(Path.Combine(Settings.Directory, "secrets.json"), protect: OperatingSystem.IsWindows());
         if (OperatingSystem.IsLinux()) return new CommandSecretStore(file, SecretToolCommands);
         if (OperatingSystem.IsMacOS()) return new CommandSecretStore(file, KeychainCommands);
@@ -45,6 +46,26 @@ public sealed record CommandSet(
     Func<string, string[]> Lookup,
     Func<string, (string[] Args, bool SecretOnStdin)> Store,
     Func<string, string[]> Clear);
+
+/// <summary>Session-only store, for the browser and tests.</summary>
+public sealed class MemorySecretStore : ISecretStore
+{
+    public Dictionary<string, string> Values { get; } = [];
+
+    public Task<string?> GetAsync(string account) => Task.FromResult(Values.GetValueOrDefault(account));
+
+    public Task SetAsync(string account, string secret)
+    {
+        Values[account] = secret;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string account)
+    {
+        Values.Remove(account);
+        return Task.CompletedTask;
+    }
+}
 
 /// <summary>OS keyring through its CLI tool, falling back to the file store when the tool or keyring is unavailable.</summary>
 public sealed class CommandSecretStore(FileSecretStore fallback, CommandSet commands) : ISecretStore

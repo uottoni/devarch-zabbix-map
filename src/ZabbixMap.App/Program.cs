@@ -9,5 +9,5 @@ static class Program
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
     public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>().UsePlatformDetect().WithInterFont().LogToTrace();
+        AppBuilder.Configure<ZabbixMap.UI.App>().UsePlatformDetect().WithInterFont().LogToTrace();
 }

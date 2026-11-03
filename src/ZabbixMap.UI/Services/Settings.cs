@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ZabbixMap.App.Services;
+namespace ZabbixMap.UI.Services;
 
 /// <summary>Persisted connection preferences. Credentials live in <see cref="ISecretStore"/>, never here.</summary>
 public sealed class Settings
@@ -22,6 +22,7 @@ public sealed class Settings
 
     public static Settings Load()
     {
+        if (OperatingSystem.IsBrowser()) return new();
         try
         {
             return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new();
@@ -32,7 +33,11 @@ public sealed class Settings
         }
     }
 
-    public void Save() => WritePrivate(FilePath, JsonSerializer.Serialize(this));
+    /// <summary>No-op in the browser, where settings live only for the session.</summary>
+    public void Save()
+    {
+        if (!OperatingSystem.IsBrowser()) WritePrivate(FilePath, JsonSerializer.Serialize(this));
+    }
 
     /// <summary>Writes a file readable only by the current user (permission set before the content goes in).</summary>
     public static void WritePrivate(string path, string content)

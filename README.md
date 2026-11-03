@@ -42,6 +42,40 @@ Rótulos de tráfego no frontend do próprio Zabbix aparecem como valor bruto; a
 
 A conexão fica guardada na máquina: o token de API, ou a sessão devolvida pelo login com senha, vai para o cofre do sistema (Secret Service/KWallet/GNOME Keyring no Linux, Keychain no macOS). No Windows, ou quando não há cofre disponível, vai para `secrets.json` na pasta de configuração do usuário, com permissão só do usuário; no Windows o valor também é cifrado com DPAPI. A senha nunca é salva. Se a sessão expirar no Zabbix, o app pede o login de novo.
 
+## Navegador (WebAssembly)
+
+O mesmo app roda no navegador, útil para depurar. No navegador não há bandeja, notificação do sistema nem janelas separadas: diálogos e o resumo do host abrem sobre o mapa, e conexão e configurações ficam só na memória da aba.
+
+1. Instale uma vez a carga de trabalho de WebAssembly, que exige root nesta instalação do .NET:
+
+       sudo dotnet workload install wasm-tools
+
+   Sem ela o projeto compila, mas as bibliotecas nativas de desenho (Skia) não entram e a tela fica em branco.
+
+2. O Zabbix não envia cabeçalhos CORS, então o navegador bloqueia a API. Em outro terminal, suba o proxy local:
+
+       dotnet run --project dev/CorsProxy -- https://zabbix.exemplo.com.br
+
+   Use `--ignorar-certificado` para certificado autoassinado. O proxy escuta só em localhost, aceita só origens localhost e repassa apenas `api_jsonrpc.php`.
+
+3. Rode o app:
+
+       dotnet run --project src/ZabbixMap.Browser
+
+   Abra `http://localhost:5235` e conecte em `http://localhost:8089`, o proxy.
+
+Para colocar breakpoints no C#, abra a página no Chrome ou Edge com depuração remota (`--remote-debugging-port=9222`) e acesse `http://localhost:5235/_framework/debug`. Visual Studio e Rider também anexam pelo perfil em `src/ZabbixMap.Browser/Properties/launchSettings.json`. O console do navegador mostra o `Console.WriteLine` e as exceções do app.
+
+## Estrutura
+
+| Projeto | Papel |
+| --- | --- |
+| `src/ZabbixMap.Core` | Cliente da API do Zabbix, modelo do mapa, status e formatação |
+| `src/ZabbixMap.UI` | Interface Avalonia compartilhada |
+| `src/ZabbixMap.App` | Executável desktop |
+| `src/ZabbixMap.Browser` | Executável WebAssembly |
+| `dev/CorsProxy` | Proxy de CORS para desenvolvimento no navegador |
+
 ## Testes
 
     dotnet test --project tests/ZabbixMap.Tests

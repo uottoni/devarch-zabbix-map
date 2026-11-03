@@ -7,8 +7,8 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Xunit;
-using ZabbixMap.App;
-using ZabbixMap.App.Controls;
+using ZabbixMap.UI;
+using ZabbixMap.UI.Controls;
 using ZabbixMap.Core;
 
 namespace ZabbixMap.Tests;
@@ -52,15 +52,16 @@ public class UiTests
 
     static async Task<MainWindow> Open(FakeClient client)
     {
-        var window = new MainWindow { Notify = (_, _) => { } };
+        var window = new MainWindow();
+        window.View.Notify = (_, _) => { };
         window.Show();
-        await window.AttachAsync(client);
-        await window.OpenMapAsync("5");
+        await window.View.AttachAsync(client);
+        await window.View.OpenMapAsync("5");
         Dispatcher.UIThread.RunJobs();
         return window;
     }
 
-    static T Find<T>(Window window, string name) where T : Control => window.FindControl<T>(name)!;
+    static T Find<T>(MainWindow window, string name) where T : Control => window.View.FindControl<T>(name)!;
     static Point Screen(MapCanvas canvas, MapElement e) => canvas.TranslatePoint(new Point(e.X * canvas.Zoom + canvas.Offset.X, e.Y * canvas.Zoom + canvas.Offset.Y), TopLevel.GetTopLevel(canvas)!)!.Value;
 
     [AvaloniaFact]
@@ -166,21 +167,21 @@ public class UiTests
         var client = Network();
         var window = await Open(client);
         var notes = new List<string>();
-        window.Notify = (title, host) => notes.Add($"{title}:{host}");
+        window.View.Notify = (title, host) => notes.Add($"{title}:{host}");
         var counts = new List<int>();
-        window.DownCountChanged += counts.Add;
+        window.View.DownCountChanged += counts.Add;
 
-        await window.RefreshAsync();
+        await window.View.RefreshAsync();
         Assert.Empty(notes);
 
         client.Hosts[0] = client.Hosts[0] with { Unavailable = true };
-        await window.RefreshAsync();
-        await window.RefreshAsync();
+        await window.View.RefreshAsync();
+        await window.View.RefreshAsync();
         Assert.Equal(["Host parado:ASBR_01"], notes);
         Assert.Equal(2, counts[^1]);
 
         client.Hosts[0] = client.Hosts[0] with { Unavailable = false };
-        await window.RefreshAsync();
+        await window.View.RefreshAsync();
         Assert.Equal("Host recuperado:ASBR_01", notes[^1]);
         Assert.Equal(1, counts[^1]);
     }
@@ -190,7 +191,7 @@ public class UiTests
     {
         var client = new ThrowingClient(Network());
         var window = await Open(client.Inner);
-        await window.AttachAsync(client);
+        await window.View.AttachAsync(client);
         Assert.Contains("falha ao atualizar", Find<TextBlock>(window, "StatusText").Text);
     }
 

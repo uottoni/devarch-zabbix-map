@@ -1,11 +1,11 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:c="using:ZabbixMap.App.Controls"
-        xmlns:app="using:ZabbixMap.App"
-        x:Class="ZabbixMap.App.MainWindow"
-        x:DataType="app:MainWindow"
-        Title="ZabbixMap" Width="1400" Height="860" FontSize="12">
-  <Window.Styles>
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:ZabbixMap.UI.Controls"
+             xmlns:app="using:ZabbixMap.UI"
+             x:Class="ZabbixMap.UI.MainView"
+             x:DataType="app:MainView"
+             FontSize="12" Background="White">
+  <UserControl.Styles>
     <Style Selector="Button, ToggleButton">
       <Setter Property="Padding" Value="8,3" />
       <Setter Property="Margin" Value="2,0" />
@@ -13,7 +13,8 @@
     <Style Selector="TreeViewItem">
       <Setter Property="MinHeight" Value="22" />
     </Style>
-  </Window.Styles>
+  </UserControl.Styles>
+  <Panel>
   <DockPanel>
     <!-- Barra de ferramentas / busca -->
     <Border DockPanel.Dock="Top" Background="#F0F0F0" BorderBrush="#CCC" BorderThickness="0,0,0,1" Padding="4">
@@ -78,4 +79,7 @@
       </Panel>
     </Grid>
   </DockPanel>
-</Window>
+  <!-- Diálogos e painéis no navegador, onde não há janelas separadas. -->
+  <Panel x:Name="OverlayHost" IsVisible="False" />
+  </Panel>
+</UserControl>

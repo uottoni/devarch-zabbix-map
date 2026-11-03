@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 
 namespace ZabbixMap.Core;
@@ -22,6 +21,8 @@ public sealed class ZabbixClient : IZabbixClient, IDisposable
     {
         BaseUrl = NormalizeBaseUrl(url);
         _endpoint = new Uri(BaseUrl + "/api_jsonrpc.php");
+        // The browser's fetch handler supports neither custom handlers nor certificate overrides.
+        if (OperatingSystem.IsBrowser()) handler ??= new HttpClientHandler();
         handler ??= ignoreCertificateErrors
             ? new HttpClientHandler { ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator }
             : new HttpClientHandler();
@@ -81,13 +82,14 @@ public sealed class ZabbixClient : IZabbixClient, IDisposable
         if (!anonymous && _token != null && !UsesBearer) body["auth"] = _token;
 
         using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint);
-        request.Content = JsonContent.Create<JsonNode>(body, mediaType: new("application/json-rpc"));
+        // String in, string out: trim-safe, which the WebAssembly build needs.
+        request.Content = new StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json-rpc");
         if (!anonymous && _token != null && UsesBearer)
             request.Headers.Authorization = new("Bearer", _token);
 
         using var response = await _http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
-        var json = await response.Content.ReadFromJsonAsync<JsonNode>(ct) ?? throw new ZabbixApiException("Resposta vazia do servidor.");
+        var json = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct)) ?? throw new ZabbixApiException("Resposta vazia do servidor.");
         if (json["error"] is { } error)
             throw new ZabbixApiException($"{method}: {error["message"]} {error["data"]}".Trim());
         return json["result"] ?? throw new ZabbixApiException($"{method}: resposta sem resultado.");
