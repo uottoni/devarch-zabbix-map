@@ -1,5 +1,8 @@
 <Solution>
   <Project Path="src/ZabbixMap.Core/ZabbixMap.Core.csproj" />
+  <Project Path="src/ZabbixMap.UI/ZabbixMap.UI.csproj" />
   <Project Path="src/ZabbixMap.App/ZabbixMap.App.csproj" />
+  <Project Path="src/ZabbixMap.Browser/ZabbixMap.Browser.csproj" />
+  <Project Path="dev/CorsProxy/CorsProxy.csproj" />
   <Project Path="tests/ZabbixMap.Tests/ZabbixMap.Tests.csproj" />
 </Solution>

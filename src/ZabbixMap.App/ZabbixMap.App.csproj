@@ -1,18 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Executável desktop (Windows, Linux, macOS). A interface fica em ZabbixMap.UI. -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>ZabbixMap</AssemblyName>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ZabbixMap.Core\ZabbixMap.Core.csproj" />
+    <ProjectReference Include="..\ZabbixMap.UI\ZabbixMap.UI.csproj" />
   </ItemGroup>
 </Project>

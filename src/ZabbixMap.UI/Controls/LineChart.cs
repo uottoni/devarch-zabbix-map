@@ -5,7 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using ZabbixMap.Core;
 
-namespace ZabbixMap.App.Controls;
+namespace ZabbixMap.UI.Controls;
 
 public sealed record ChartSeries(string Name, Color Color, IReadOnlyList<HistoryPoint> Points);
 

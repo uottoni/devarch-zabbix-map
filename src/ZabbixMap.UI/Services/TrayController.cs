@@ -4,7 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
-namespace ZabbixMap.App.Services;
+namespace ZabbixMap.UI.Services;
 
 /// <summary>Tray icon: green when all is well, red with a flag while any host is down.</summary>
 public sealed class TrayController
@@ -23,7 +23,7 @@ public sealed class TrayController
         quit.Click += async (_, _) =>
         {
             Restore();
-            if (await window.ConfirmDiscardAsync()) desktop.Shutdown();
+            if (await window.View.ConfirmDiscardAsync()) desktop.Shutdown();
         };
         _tray = new TrayIcon
         {

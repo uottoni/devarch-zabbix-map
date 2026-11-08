@@ -5,13 +5,13 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
-using ZabbixMap.App.Controls;
-using ZabbixMap.App.Services;
+using ZabbixMap.UI.Controls;
+using ZabbixMap.UI.Services;
 using ZabbixMap.Core;
 
-namespace ZabbixMap.App;
+namespace ZabbixMap.UI;
 
-public partial class MainWindow : Window
+public partial class MainView : UserControl
 {
     static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
     static readonly DataFormat<string> HostDragFormat = DataFormat.CreateStringApplicationFormat("zabbixmap-host");
@@ -34,16 +34,18 @@ public partial class MainWindow : Window
     string _treeSignature = "";
 
     public event Action<int>? DownCountChanged;
+    public event Action<string>? TitleChanged;
+    public string Title { get; private set; } = "ZabbixMap";
     public Action<string, string> Notify { get; set; } = DesktopNotifier.Show;
     public ISecretStore Secrets { get; set; } = SecretStores.CreateDefault();
     public Func<ConnectionInput, Task<(IZabbixClient Client, string Secret)>> Connect { get; set; } = ConnectToServerAsync;
     public Func<string?, Task<ConnectionInput?>> AskConnection { get; set; }
 
-    public MainWindow() : this(Settings.Load())
+    public MainView() : this(Settings.Load())
     {
     }
 
-    public MainWindow(Settings settings)
+    public MainView(Settings settings)
     {
         _settings = settings;
         AskConnection = AskConnectionAsync;
@@ -121,17 +123,6 @@ public partial class MainWindow : Window
 
         KeyDown += OnWindowKeyDown;
         ApplyEditState();
-    }
-
-    /// <summary>Closing hides to the tray so monitoring continues. Only used when a tray owns the window's life.</summary>
-    protected override void OnClosing(WindowClosingEventArgs e)
-    {
-        base.OnClosing(e);
-        if (e.CloseReason is WindowCloseReason.WindowClosing && DownCountChanged != null)
-        {
-            e.Cancel = true;
-            Hide();
-        }
     }
 
     /// <summary>Connects with the saved credential, or asks for one. Runs once: Opened fires again on every restore from the tray.</summary>
@@ -521,12 +512,24 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Opens the latest-data summary; non-modal so several hosts can be compared.</summary>
-    public HostSummaryWindow? ShowHostSummary(string hostId)
+    public HostSummaryView? ShowHostSummary(string hostId)
     {
         if (_client == null || _snapshot == null || !_snapshot.Hosts.TryGetValue(hostId, out var host)) return null;
-        var window = new HostSummaryWindow(_client, host, _snapshot.HostStatus(hostId));
-        window.Show(this);
-        return window;
+        var view = new HostSummaryView(_client, host, _snapshot.HostStatus(hostId));
+        DialogPresenter.ShowPanel(this, view.Title, view, 1250, 780);
+        return view;
+    }
+
+    /// <summary>Shows content above the map (browser dialogs and panels); returns the action that removes it.</summary>
+    internal Action ShowOverlay(Control content)
+    {
+        OverlayHost.Children.Add(content);
+        OverlayHost.IsVisible = true;
+        return () =>
+        {
+            OverlayHost.Children.Remove(content);
+            OverlayHost.IsVisible = OverlayHost.Children.Count > 0;
+        };
     }
 
     void OnTreeContext(object? sender, ContextRequestedEventArgs e)
@@ -544,7 +547,7 @@ public partial class MainWindow : Window
     {
         if (_client == null) return;
         var url = $"{_client.BaseUrl}/zabbix.php?action=problem.view&filter_set=1&hostids%5B%5D={Uri.EscapeDataString(element.RefId)}";
-        Launcher.LaunchUriAsync(new Uri(url));
+        TopLevel.GetTopLevel(this)?.Launcher.LaunchUriAsync(new Uri(url));
     }
 
     void OnCanvasContext(object? sender, ContextRequestedEventArgs e)
@@ -640,6 +643,7 @@ public partial class MainWindow : Window
     {
         var map = Canvas.Map;
         Title = map == null ? "ZabbixMap" : $"{(map.IsDirty ? "* " : "")}{map.Name} - ZabbixMap";
+        TitleChanged?.Invoke(Title);
         EmptyHint.IsVisible = map == null;
         SaveButton.IsEnabled = map?.IsDirty == true;
     }
@@ -653,7 +657,7 @@ public partial class MainWindow : Window
     void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         var ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta);
-        var typing = FocusManager?.GetFocusedElement() is TextBox;
+        var typing = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox;
         switch (e.Key)
         {
             case Key.S when ctrl:

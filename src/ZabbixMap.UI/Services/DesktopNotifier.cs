@@ -1,12 +1,13 @@
 using System.Diagnostics;
 
-namespace ZabbixMap.App.Services;
+namespace ZabbixMap.UI.Services;
 
 /// <summary>Native notification through each OS's own tool. Text goes as arguments or environment, never through a shell.</summary>
 public static class DesktopNotifier
 {
     public static void Show(string title, string message)
     {
+        if (OperatingSystem.IsBrowser()) return;
         try
         {
             var info = new ProcessStartInfo { UseShellExecute = false, CreateNoWindow = true };

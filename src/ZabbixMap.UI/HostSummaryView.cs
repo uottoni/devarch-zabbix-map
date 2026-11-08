@@ -7,13 +7,13 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
-using ZabbixMap.App.Controls;
+using ZabbixMap.UI.Controls;
 using ZabbixMap.Core;
 
-namespace ZabbixMap.App;
+namespace ZabbixMap.UI;
 
 /// <summary>Host summary: latest data grouped by component, with a history chart for the selected item.</summary>
-public sealed class HostSummaryWindow : Window
+public sealed class HostSummaryView : UserControl
 {
     static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(30);
     static readonly (string Label, TimeSpan Period)[] Ranges =
@@ -42,18 +42,17 @@ public sealed class HostSummaryWindow : Window
     HostItem? _chartItem;
     int _chartRequest;
 
+    public string Title { get; }
     public LineChart Chart { get; } = new();
     public IReadOnlyList<object> Rows => (IReadOnlyList<object>?)_list.ItemsSource ?? [];
 
-    public HostSummaryWindow(IZabbixClient client, HostInfo host, ElementStatus status)
+    public HostSummaryView(IZabbixClient client, HostInfo host, ElementStatus status)
     {
         _client = client;
         _host = host;
         Title = $"{host.Name} - resumo";
-        Width = 1250;
-        Height = 780;
         FontSize = 12;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = Brushes.White;
 
         _list.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
         {
@@ -97,21 +96,23 @@ public sealed class HostSummaryWindow : Window
         _timer.Tick += async (_, _) => await LoadAsync();
 
         Content = Layout(status, refresh);
-        Opened += async (_, _) =>
+        AttachedToVisualTree += async (_, _) =>
         {
-            await LoadAsync();
             _timer.Start();
+            await LoadAsync();
         };
-        Closed += (_, _) => _timer.Stop();
+        DetachedFromVisualTree += (_, _) => _timer.Stop();
     }
 
     Control Layout(ElementStatus status, Button refresh)
     {
-        var header = new StackPanel { Spacing = 2, Margin = new Thickness(12, 10, 12, 6) };
+        // Problems flow as chips beside the host name, so they use the width instead of pushing the list down.
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(12, 10, 12, 6) };
         header.Children.Add(new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Top,
             Children =
             {
                 new Ellipse { Width = 12, Height = 12, Fill = new SolidColorBrush(MapCanvas.HealthColor(status)), VerticalAlignment = VerticalAlignment.Center },
@@ -119,17 +120,16 @@ public sealed class HostSummaryWindow : Window
                 new TextBlock { Text = $"{_host.Host} · {_host.Ip}", Foreground = Brushes.DimGray, VerticalAlignment = VerticalAlignment.Center },
             },
         });
+        var problems = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 0, 0) };
         if (status.Health == NodeHealth.Down && status.Problems.Count == 0)
-            header.Children.Add(new TextBlock { Text = "Interfaces indisponíveis", Foreground = Brushes.Firebrick });
-        foreach (var problem in status.Problems.Take(5))
-            header.Children.Add(new TextBlock
-            {
-                Text = $"• {problem.Description}  (desde {problem.Since.ToLocalTime():dd/MM HH:mm})",
-                Foreground = new SolidColorBrush(MapCanvas.HealthColor(new(NodeHealth.Problem, problem.Severity, [problem]))),
-                FontWeight = FontWeight.SemiBold,
-            });
-        if (status.Problems.Count > 5)
-            header.Children.Add(new TextBlock { Text = $"… e mais {status.Problems.Count - 5} problema(s)", Foreground = Brushes.Firebrick });
+            problems.Children.Add(ProblemChip("Interfaces indisponíveis", "", MapCanvas.HealthColor(status)));
+        foreach (var problem in status.Problems)
+            problems.Children.Add(ProblemChip(problem.Description, $"desde {problem.Since.ToLocalTime():dd/MM/yyyy HH:mm}",
+                MapCanvas.HealthColor(new(NodeHealth.Problem, problem.Severity, [problem]))));
+        ProblemsPanel = problems;
+        var problemScroll = new ScrollViewer { Content = problems, MaxHeight = 56, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        Grid.SetColumn(problemScroll, 1);
+        header.Children.Add(problemScroll);
 
         var filters = new DockPanel { Margin = new Thickness(12, 0, 12, 6) };
         var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _showEmpty, _search, refresh } };
@@ -266,6 +266,21 @@ public sealed class HostSummaryWindow : Window
             if (request == _chartRequest) Chart.SetMessage($"Falha ao carregar o histórico: {e.Message}");
         }
     }
+
+    public WrapPanel? ProblemsPanel { get; private set; }
+
+    static Border ProblemChip(string text, string since, Color color) => new()
+    {
+        Background = new SolidColorBrush(color, 0.18),
+        BorderBrush = new SolidColorBrush(color),
+        BorderThickness = new Thickness(3, 0, 0, 0),
+        CornerRadius = new CornerRadius(3),
+        Padding = new Thickness(6, 1),
+        Margin = new Thickness(0, 0, 4, 3),
+        MaxWidth = 340,
+        Child = new TextBlock { Text = text, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis },
+        [ToolTip.TipProperty] = since == "" ? text : $"{text}\n{since}",
+    };
 
     static string FormatAge(TimeSpan age) =>
         age.TotalSeconds < 60 ? $"{Math.Max(0, (int)age.TotalSeconds)}s"
